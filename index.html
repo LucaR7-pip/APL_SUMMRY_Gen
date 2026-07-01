@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slide Builder v1.2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!-- PptxGenJS via jsDelivr (correct bundle path) -->
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"
+        onload="console.log('PptxGenJS loaded:',typeof PptxGenJS)"
+        onerror="console.warn('PptxGenJS CDN failed')"></script>
+</head>
+<body>
+
+<!-- SVG filter container for Liquid Glass displacement maps -->
+<svg id="lg-svg" xmlns="http://www.w3.org/2000/svg">
+  <defs id="lg-defs"></defs>
+</svg>
+
+<div id="progress-bar"></div>
+<div id="notif"></div>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo"><span>Slide</span> Builder <span style="color:var(--text3);font-size:8px;margin-left:2px">v1.2</span></div>
+  <div class="h-sep"></div>
+  <div class="h-group"><span class="h-label">Ratio</span>
+    <select class="h-select" id="ratio-select" onchange="setRatio(this.value)">
+      <optgroup label="Screen">
+        <option value="16:9" selected>16 : 9</option>
+        <option value="4:3">4 : 3</option>
+        <option value="1:1">1 : 1</option>
+      </optgroup>
+      <optgroup label="ISO (mm)">
+        <option value="A3">A3</option>
+        <option value="A4">A4</option>
+        <option value="A5">A5</option>
+      </optgroup>
+      <optgroup label="US (in)">
+        <option value="Letter">Letter</option>
+        <option value="Legal">Legal</option>
+        <option value="Ledger">Ledger / Tabloid</option>
+      </optgroup>
+      <optgroup label="Other">
+        <option value="Custom">Custom…</option>
+      </optgroup>
+    </select>
+  </div>
+  <div class="h-group"><span class="h-label">Grid</span>
+    <select class="h-select" id="pitch-select">
+      <option value="1" selected>1×</option><option value="0.5">½×</option><option value="0.25">¼×</option>
+    </select>
+  </div>
+  <div class="h-group"><span class="h-label">Cols</span>
+    <select class="h-select" id="cols-select">
+      <option value="8">8</option><option value="10">10</option><option value="12" selected>12</option>
+      <option value="16">16</option><option value="20">20</option><option value="24">24</option>
+    </select>
+  </div>
+  <div class="h-group"><span class="h-label">Rows</span>
+    <select class="h-select" id="rows-select">
+      <option value="4">4</option><option value="6">6</option><option value="7" selected>7</option>
+      <option value="8">8</option><option value="10">10</option>
+    </select>
+  </div>
+  <div class="h-sep"></div>
+  <div class="mode-pill">
+    <button id="mode-draw" class="active" onclick="setMode('draw')">Draw</button>
+    <button id="mode-sel" onclick="setMode('select')">Select</button>
+  </div>
+  <div class="spacer"></div>
+  <button class="h-btn" onclick="clearSlide()">Clear</button>
+  <button class="h-btn" onclick="loadSample()">Sample</button>
+  <button class="h-btn" id="grid-toggle-btn" onclick="toggleGrid()" title="Toggle grid (G)">Grid ✓</button>
+  <button class="h-btn primary" onclick="openExport()">Export ↗</button>
+</div>
+
+<!-- BODY -->
+<div id="body">
+
+  <!-- LEFT PANEL -->
+  <div id="left-panel">
+    <div class="panel-section">
+      <div class="panel-title">Slide</div>
+      <div class="field-row" id="custom-size-row" style="display:none">
+        <span class="field-label">Size</span>
+        <input class="field-input" id="custom-w" type="number" min="1" step="any" value="1920" style="width:62px" oninput="updateCustomSize()">
+        <span style="color:var(--text3);font-size:10px">×</span>
+        <input class="field-input" id="custom-h" type="number" min="1" step="any" value="1080" style="width:62px" oninput="updateCustomSize()">
+        <select class="field-input h-select" id="custom-unit" style="font-family:var(--mono);font-size:10px;width:48px" onchange="updateCustomSize()">
+          <option value="px">px</option>
+          <option value="mm">mm</option>
+          <option value="in">in</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <span class="field-label">Background</span>
+        <input type="color" class="cn" id="bg-color" value="#111111" oninput="updateSlideBg(this.value)">
+        <input class="field-input" id="bg-hex" value="#111111" style="width:78px" oninput="setBgFromHex(this.value)">
+      </div>
+      <div class="field-row range-row">
+        <div class="range-head"><span class="field-label">Gutter (px)</span><span class="range-val" id="gutter-val">8</span></div>
+        <input type="range" class="field-range" id="gutter-rng" min="0" max="32" value="8" oninput="updateGutter(+this.value)">
+      </div>
+      <!-- Background Image -->
+      <div style="margin-top:5px">
+        <span class="field-label" style="display:block;margin-bottom:2px">BG Image</span>
+        <div class="upload-zone" onclick="document.getElementById('bg-file').click()">Click to upload</div>
+        <input type="file" id="bg-file" accept="image/*" style="display:none" onchange="loadBgImage(this)">
+        <div id="bg-img-name"></div>
+        <div class="field-row" style="margin-top:5px">
+          <span class="field-label">Fit</span>
+          <select class="field-input h-select" id="bg-fit" style="font-family:var(--mono);font-size:10px" onchange="updateBgFit(this.value)">
+            <option value="cover">Cover</option><option value="contain">Contain</option><option value="fill">Fill</option>
+          </select>
+        </div>
+        <div class="field-row" style="margin-top:3px">
+          <span class="field-label">Dim</span>
+          <input type="range" class="field-range" id="bg-dim-rng" min="0" max="100" value="0" oninput="updateBgDim(+this.value)" style="flex:1">
+          <span class="range-val" id="bg-dim-val">0%</span>
+        </div>
+        <button class="h-btn" onclick="clearBgImage()" style="width:100%;margin-top:5px;font-size:9px">Remove Image</button>
+      </div>
+    </div>
+
+    <div class="panel-section" style="padding-bottom:6px">
+      <div class="panel-title">Tiles <span style="color:var(--text3);font-size:9px" id="tile-count">(0)</span></div>
+    </div>
+    <div id="tile-list"></div>
+    <div id="add-tile-btn" onclick="addTileCenter()">+ Add Tile</div>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvas-area">
+    <div id="canvas-wrap">
+      <div id="slide-canvas">
+        <canvas id="grid-overlay"></canvas>
+        <div id="draw-ghost"></div>
+        <div id="bg-dim-ov" style="position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:1"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="right-panel">
+    <div id="no-selection">
+      <div class="ns-icon">⬛</div>
+      <div class="ns-hint">Draw on canvas to place a tile,<br>or click a tile to edit it.</div>
+    </div>
+    <div id="tile-editor" style="display:none">
+
+      <!-- CONTENT -->
+      <div class="panel-section">
+        <div class="panel-title">Content</div>
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:7px">
+          <span class="field-label">Headline</span>
+          <input class="field-input" id="t-hl" placeholder="48MP" oninput="upTF('headline',this.value)">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:7px">
+          <span class="field-label">Label</span>
+          <input class="field-input" id="t-lb" placeholder="Main camera" oninput="upTF('label',this.value)">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:7px">
+          <span class="field-label">Icon (emoji)</span>
+          <input class="field-input" id="t-ic" placeholder="📷" style="font-size:16px" oninput="upTF('icon',this.value)">
+        </div>
+        <div class="field-row">
+          <span class="field-label">Layout</span>
+          <select class="field-input h-select" id="t-layout" style="font-family:var(--mono);font-size:10px" onchange="upTF('layout',this.value)">
+            <option value="bottom-left">Bottom left</option>
+            <option value="center">Centered</option>
+            <option value="top-left">Top left</option>
+            <option value="icon-top">Icon + Text</option>
+          </select>
+        </div>
+        <div class="field-row" style="margin-top:5px">
+          <span class="field-label">Font</span>
+          <select class="field-input h-select" id="t-font" style="font-family:var(--mono);font-size:10px" onchange="upTF('fontKey',this.value)">
+            <option value="sf">SF Pro (system)</option>
+            <option value="dm">DM Sans</option>
+            <option value="mono">DM Mono</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- TILE STYLE -->
+      <div class="panel-section">
+        <div class="panel-title">Tile Style</div>
+        <div class="style-tabs">
+          <div class="style-tab active" data-m="opaque" onclick="setStyleTab('opaque')">Opaque</div>
+          <div class="style-tab" data-m="glass" onclick="setStyleTab('glass')">Clear</div>
+          <div class="style-tab" data-m="tinted" onclick="setStyleTab('tinted')">Tinted</div>
+          <div class="style-tab" data-m="liquid" onclick="setStyleTab('liquid')">Liquid Glass</div>
+        </div>
+
+        <!-- OPAQUE -->
+        <div id="p-opaque">
+          <div class="color-swatch-row" id="preset-swatches"></div>
+          <div class="field-row">
+            <span class="field-label">Color</span>
+            <input type="color" class="cn" id="t-col-n" oninput="upTF('bg',this.value)">
+            <input class="field-input" id="t-col-h" placeholder="#3A7EFF" style="width:76px" oninput="setTileHex(this.value)">
+          </div>
+        </div>
+
+        <!-- CLEAR GLASS -->
+        <div id="p-glass" style="display:none">
+          <div class="field-row range-row">
+            <div class="range-head"><span class="field-label">Blur (px)</span><span class="range-val" id="g-blur-v">12</span></div>
+            <input type="range" class="field-range" id="g-blur" min="0" max="40" value="12"
+                   oninput="upTF('glassBlur',+this.value);$('g-blur-v').textContent=this.value">
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Brightness</span><span class="range-val" id="g-bright-v">1.05</span></div>
+            <input type="range" class="field-range" id="g-bright" min="80" max="140" value="105"
+                   oninput="upTF('glassBrightness',this.value/100);$('g-bright-v').textContent=(this.value/100).toFixed(2)">
+          </div>
+          <div class="toggle-row" style="margin-top:7px">
+            <span class="field-label">Specular rim</span>
+            <label class="toggle"><input type="checkbox" id="g-spec" checked onchange="upTF('glassSpec',this.checked)"><div class="toggle-slider"></div></label>
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Rim offset</span><span class="range-val" id="g-rim-off-v">5</span></div>
+            <input type="range" class="field-range" id="g-rim-off" min="0" max="24" value="5"
+                   oninput="upTF('rimOffset',+this.value);$('g-rim-off-v').textContent=this.value">
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Rim opacity</span><span class="range-val" id="g-rim-op-v">32%</span></div>
+            <input type="range" class="field-range" id="g-rim-op" min="5" max="80" value="32"
+                   oninput="upTF('rimOpacity',this.value/100);$('g-rim-op-v').textContent=this.value+'%'">
+          </div>
+        </div>
+
+        <!-- TINTED -->
+        <div id="p-tinted" style="display:none">
+          <div class="rgba-grid">
+            <div class="rgba-row"><span class="rgba-ch">R</span><input type="range" class="rgba-sl" id="sr" min="0" max="255" value="10" oninput="updateRGBA()"><span class="rgba-num" id="vr">10</span></div>
+            <div class="rgba-row"><span class="rgba-ch">G</span><input type="range" class="rgba-sl" id="sg" min="0" max="255" value="132" oninput="updateRGBA()"><span class="rgba-num" id="vg">132</span></div>
+            <div class="rgba-row"><span class="rgba-ch">B</span><input type="range" class="rgba-sl" id="sb" min="0" max="255" value="255" oninput="updateRGBA()"><span class="rgba-num" id="vb">255</span></div>
+            <div class="rgba-row"><span class="rgba-ch">A</span><input type="range" class="rgba-sl" id="sa" min="0" max="100" value="40" oninput="updateRGBA()"><span class="rgba-num" id="va">40%</span></div>
+          </div>
+          <div class="field-row range-row" style="margin-top:8px">
+            <div class="range-head"><span class="field-label">Blur (px)</span><span class="range-val" id="t-blur-v">14</span></div>
+            <input type="range" class="field-range" id="t-blur" min="0" max="40" value="14"
+                   oninput="upTF('glassBlur',+this.value);$('t-blur-v').textContent=this.value">
+          </div>
+          <div class="toggle-row" style="margin-top:7px">
+            <span class="field-label">Specular rim</span>
+            <label class="toggle"><input type="checkbox" id="t-spec" checked onchange="upTF('glassSpec',this.checked)"><div class="toggle-slider"></div></label>
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Rim offset</span><span class="range-val" id="t-rim-off-v">5</span></div>
+            <input type="range" class="field-range" id="t-rim-off" min="0" max="24" value="5"
+                   oninput="upTF('rimOffset',+this.value);$('t-rim-off-v').textContent=this.value">
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Rim opacity</span><span class="range-val" id="t-rim-op-v">32%</span></div>
+            <input type="range" class="field-range" id="t-rim-op" min="5" max="80" value="32"
+                   oninput="upTF('rimOpacity',this.value/100);$('t-rim-op-v').textContent=this.value+'%'">
+          </div>
+        </div>
+
+        <!-- LIQUID GLASS -->
+        <div id="p-liquid" style="display:none">
+          <p style="font-size:10px;color:var(--text2);line-height:1.55;margin-bottom:9px">SVG <code style="color:var(--accent)">feDisplacementMap</code> simulates convex squircle lens refraction (Snell's Law, n=1.5). Most visible over colorful backgrounds.</p>
+          <div class="field-row range-row">
+            <div class="range-head"><span class="field-label">Refraction</span><span class="range-val" id="lg-sc-v">60</span></div>
+            <input type="range" class="field-range" id="lg-sc" min="10" max="200" value="60"
+                   oninput="upTF('lgScale',+this.value);$('lg-sc-v').textContent=this.value">
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Blur (px)</span><span class="range-val" id="lg-bl-v">8</span></div>
+            <input type="range" class="field-range" id="lg-bl" min="0" max="30" value="8"
+                   oninput="upTF('glassBlur',+this.value);$('lg-bl-v').textContent=this.value">
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Tint opacity</span><span class="range-val" id="lg-ti-v">0%</span></div>
+            <input type="range" class="field-range" id="lg-ti" min="0" max="80" value="0"
+                   oninput="upTF('lgTintOp',this.value/100);$('lg-ti-v').textContent=this.value+'%'">
+          </div>
+          <div class="field-row" style="margin-top:6px">
+            <span class="field-label">Tint color</span>
+            <input type="color" class="cn" id="lg-tc" value="#ffffff" oninput="upTF('lgTintColor',this.value)">
+          </div>
+          <div class="toggle-row" style="margin-top:7px">
+            <span class="field-label">Specular rim</span>
+            <label class="toggle"><input type="checkbox" id="lg-spec" checked onchange="upTF('glassSpec',this.checked)"><div class="toggle-slider"></div></label>
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Rim offset</span><span class="range-val" id="lg-rim-off-v">5</span></div>
+            <input type="range" class="field-range" id="lg-rim-off" min="0" max="24" value="5"
+                   oninput="upTF('rimOffset',+this.value);$('lg-rim-off-v').textContent=this.value">
+          </div>
+          <div class="field-row range-row" style="margin-top:6px">
+            <div class="range-head"><span class="field-label">Rim opacity</span><span class="range-val" id="lg-rim-op-v">32%</span></div>
+            <input type="range" class="field-range" id="lg-rim-op" min="5" max="80" value="32"
+                   oninput="upTF('rimOpacity',this.value/100);$('lg-rim-op-v').textContent=this.value+'%'">
+          </div>
+        </div>
+      </div>
+
+      <!-- APPEARANCE -->
+      <div class="panel-section">
+        <div class="panel-title">Appearance</div>
+        <div class="field-row range-row">
+          <div class="range-head"><span class="field-label">Fillet (px)</span><span class="range-val" id="fillet-v">16</span></div>
+          <input type="range" class="field-range" id="fillet-rng" min="0" max="80" value="16" oninput="upFillet(this.value)">
+        </div>
+        <div class="field-row range-row" style="margin-top:7px">
+          <div class="range-head"><span class="field-label">Headline px</span><span class="range-val" id="hl-size-v">32</span></div>
+          <input type="range" class="field-range" id="hl-size" min="8" max="96" value="32"
+                 oninput="upTF('headlineSize',+this.value);$('hl-size-v').textContent=this.value">
+        </div>
+        <div class="field-row range-row" style="margin-top:7px">
+          <div class="range-head"><span class="field-label">Label px</span><span class="range-val" id="lb-size-v">13</span></div>
+          <input type="range" class="field-range" id="lb-size" min="8" max="40" value="13"
+                 oninput="upTF('labelSize',+this.value);$('lb-size-v').textContent=this.value">
+        </div>
+        <div class="field-row range-row" style="margin-top:7px">
+          <div class="range-head"><span class="field-label">Opacity</span><span class="range-val" id="op-v">100</span></div>
+          <input type="range" class="field-range" id="op-rng" min="10" max="100" value="100"
+                 oninput="upTF('opacity',this.value/100);$('op-v').textContent=this.value">
+        </div>
+        <div class="toggle-row" style="margin-top:8px">
+          <span class="field-label">Text light</span>
+          <label class="toggle"><input type="checkbox" id="t-tl" checked onchange="upTF('textLight',this.checked)"><div class="toggle-slider"></div></label>
+        </div>
+      </div>
+
+      <!-- POSITION -->
+      <div class="panel-section">
+        <div class="panel-title">Position &amp; Size</div>
+        <div class="field-row">
+          <span class="field-label">Col / Row</span>
+          <input class="field-input" id="t-col" type="number" min="0" style="width:52px" oninput="upGrid('col',+this.value)">
+          <input class="field-input" id="t-row" type="number" min="0" style="width:52px" oninput="upGrid('row',+this.value)">
+        </div>
+        <div class="field-row" style="margin-top:5px">
+          <span class="field-label">Span W / H</span>
+          <input class="field-input" id="t-csp" type="number" min="1" style="width:52px" oninput="upGrid('colSpan',+this.value)">
+          <input class="field-input" id="t-rsp" type="number" min="1" style="width:52px" oninput="upGrid('rowSpan',+this.value)">
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <button class="h-btn danger" style="width:100%" onclick="deleteSelected()">Delete Tile</button>
+        <button class="h-btn" style="width:100%;margin-top:6px" onclick="duplicateSelected()">Duplicate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS -->
+<div id="status">
+  <span id="s-mode">DRAW</span> | Mouse: <span id="s-mouse">—</span> | Grid: <span id="s-grid">12×7</span> | Tiles: <span id="s-tiles">0</span> | Sel: <span id="s-sel">none</span>
+</div>
+
+<!-- EXPORT MODAL -->
+<div id="export-modal">
+  <div class="modal-box">
+    <div class="modal-title">Export Slide</div>
+    <button class="ex-btn" onclick="exportJSON()"><span class="ext">.json</span><div><div>Layout schema</div><div class="desc">Full tile data</div></div></button>
+    <button class="ex-btn" onclick="exportHTML()"><span class="ext">.html</span><div><div>Standalone HTML</div><div class="desc">Self-contained with glass effects</div></div></button>
+    <button class="ex-btn" onclick="exportSVG()"><span class="ext">.svg</span><div><div>Vector SVG</div><div class="desc">Shapes + text, Illustrator-ready</div></div></button>
+    <button class="ex-btn" onclick="exportPDF()"><span class="ext">.pdf</span><div><div>PDF</div><div class="desc">Pixel-accurate via html2canvas</div></div></button>
+    <button class="ex-btn" onclick="exportPPTX()"><span class="ext">.pptx</span><div><div>PowerPoint</div><div class="desc">Editable shapes · text stays text</div></div></button>
+    <button class="ex-btn" onclick="exportImage('png')"><span class="ext">.png</span><div><div>PNG Image</div><div class="desc">Lossless, transparent support</div></div></button>
+    <button class="ex-btn" onclick="exportImage('jpg')"><span class="ext">.jpg</span><div><div>JPEG Image</div><div class="desc">Smaller file, no transparency</div></div></button>
+    <button class="ex-btn" onclick="exportImage('webp')"><span class="ext">.webp</span><div><div>WebP Image</div><div class="desc">Modern format, best compression</div></div></button>
+    <button class="h-btn" style="width:100%;margin-top:10px" onclick="closeExport()">Cancel</button>
+  </div>
+</div>
+
+<!-- dom-to-pptx: converts the live slide canvas to editable PPTX shapes.
+     Bundled locally (lib/dom-to-pptx.bundle.js) — this is the primary
+     PPTX export path; pptxgenjs is the fallback. -->
+<script src="lib/dom-to-pptx.bundle.js"></script>
+<script src="js/liquid-glass.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
